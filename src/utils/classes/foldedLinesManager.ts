@@ -13,6 +13,7 @@ class FoldedLinesManager {
   }
 
   private cachedFoldedLines: ExtendedMap<Uri, Set<number>> = new ExtendedMap(() => new Set());
+  private cachedLatestAdded: ExtendedMap<Uri, Set<number>> = new ExtendedMap(() => new Set());
 
   public updateAllFoldedLines() {
     for (const editor of window.visibleTextEditors) {
@@ -24,28 +25,38 @@ class FoldedLinesManager {
     const { visibleRanges } = editor;
     if (visibleRanges.length === 0) return;
     let cachedLines = this.getFoldedLines(editor);
+    let latestAdded = new Set<number>();
     const currentFoldedLines = visibleRanges.slice(0, -1).map((range) => range.end.line);
 
     if (cachedLines.size === 0) {
       this.setFoldedLines(editor, new Set(currentFoldedLines));
+      this.setLatestAdded(editor, new Set(currentFoldedLines));
       return;
     }
 
-    this.matchFoldedLines(cachedLines, currentFoldedLines);
+    this.matchFoldedLines(cachedLines, latestAdded, currentFoldedLines);
     this.matchUnfoldedLines(cachedLines, currentFoldedLines, visibleRanges);
-
     this.setFoldedLines(editor, cachedLines);
+    this.setLatestAdded(editor, latestAdded);
   }
 
-  private matchFoldedLines(cachedLines: Set<number>, currentFoldedLines: number[]) {
-    currentFoldedLines.forEach((line) => cachedLines.add(line));
+  private matchFoldedLines(cachedLines: Set<number>, latestAdded: Set<number>, currentFoldedLines: number[]) {
+    currentFoldedLines.forEach((line) => {
+      if (!cachedLines.has(line)) {
+        latestAdded.add(line);
+      }
+
+      cachedLines.add(line);
+    });
   }
 
   private matchUnfoldedLines(cachedLines: Set<number>, currentFoldedLines: number[], visibleRanges: readonly Range[]) {
     const foldedLinesSet = new Set(currentFoldedLines);
     const isVisible = (l: number) => l >= visibleRanges[0].start.line && l < visibleRanges.at(-1)!.end.line;
     for (const line of cachedLines) {
-      if (isVisible(line) && !foldedLinesSet.has(line)) cachedLines.delete(line);
+      if (isVisible(line) && !foldedLinesSet.has(line)) {
+        cachedLines.delete(line);
+      }
     }
   }
 
@@ -79,6 +90,14 @@ class FoldedLinesManager {
 
   private setFoldedLines(editor: TextEditor, lines: Set<number>) {
     this.cachedFoldedLines.set(editor.document.uri, lines);
+  }
+
+  public getLatestAdded(editor: TextEditor): Set<number> {
+    return this.cachedLatestAdded.get(editor.document.uri);
+  }
+
+  public setLatestAdded(editor: TextEditor, lines: Set<number>) {
+    this.cachedLatestAdded.set(editor.document.uri, lines);
   }
 }
 
